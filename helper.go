@@ -11,10 +11,15 @@ type HttpHelper struct {
 	m *alien.Mux
 }
 
-func NewHelper() *HttpHelper {
+func NewHelper(handlers ...negroni.Handler) *HttpHelper {
 	n := negroni.New()
 	n.Use(negroni.NewRecovery())
 	n.Use(negroni.NewLogger())
+	if handlers != nil {
+		for _, handler := range handlers {
+			n.Use(handler)
+		}
+	}
 	m := alien.New()
 	n.UseHandler(m)
 	return &HttpHelper{n, m}
