@@ -32,6 +32,10 @@ func (h *HttpHelper) Use(handler negroni.Handler) {
 	h.n.Use(handler)
 }
 
+func (h *HttpHelper) UseFunc(handlerFunc negroni.HandlerFunc) {
+	h.n.UseFunc(handlerFunc)
+}
+
 func (h *HttpHelper) UseHandler(handler http.Handler) {
 	h.n.Use(negroni.Wrap(handler))
 }
