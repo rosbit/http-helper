@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"reflect"
+	"strconv"
 	"mime/multipart"
 	"encoding/json"
 	"io"
@@ -52,11 +54,112 @@ func (c *Context) Param(name string) string {
 	return c.p.Get(name)
 }
 
+// read values from path, query string or form, store them in a struct specified by vals.
+// param name is specified by field tag. e.g.
+//
+// var vals struct {
+//    V1 int    `path:"v1"`   // read path param ":v1", int8,uint8, ..., int64, uint64 are acceptable
+//    V2 bool   `query:"v2"`  // read query param "v2=xxx"
+//    V3 string `form:"v3"`   // read form param "v3=xxx"
+// }
+// if status, err := c.ReadParams(&vals); err != nil {
+//    c.Error(status, err.Error())
+//    return
+// }
+func (c *Context) ReadParams(vals interface{}) (status int, err error) {
+	if vals == nil {
+		return http.StatusOK, nil
+	}
+	p := reflect.ValueOf(vals)
+	if p.Kind() != reflect.Ptr {
+		return http.StatusInternalServerError, fmt.Errorf("vals must be pointer")
+	}
+	v := p.Elem() // struct Value
+	if v.Kind() != reflect.Struct {
+		return http.StatusInternalServerError, fmt.Errorf("vals must be pointer of struct")
+	}
+	t := v.Type() // struct Type
+	n := t.NumField()
+	var val string
+	for i:=0; i<n; i++ {
+		field := t.Field(i) // StructField
+		if tag, ok := field.Tag.Lookup("path"); !ok {
+			if tag, ok = field.Tag.Lookup("query"); !ok {
+				if tag, ok = field.Tag.Lookup("form"); !ok {
+					continue
+				} else {
+					val = c.FormValue(tag)
+				}
+			} else {
+				val = c.QueryParam(tag)
+			}
+		} else {
+			val = c.Param(tag)
+		}
+		if len(val) == 0 {
+			continue
+		}
+
+		fv := v.Field(i) // field Value
+		ft := field.Type // field Type
+		switch ft.Kind() {
+		case reflect.String:
+			fv.Set(reflect.ValueOf(val))
+		case reflect.Int,reflect.Int8,reflect.Int16,reflect.Int32,reflect.Int64:
+			i, err := strconv.ParseInt(val, 10, ft.Bits())
+			if err != nil {
+				return http.StatusBadRequest, err
+			}
+			fv.Set(reflect.ValueOf(i).Convert(ft))
+		case reflect.Uint,reflect.Uint8,reflect.Uint16,reflect.Uint32,reflect.Uint64:
+			i, err := strconv.ParseUint(val, 10, ft.Bits())
+			if err != nil {
+				return http.StatusBadRequest, err
+			}
+			fv.Set(reflect.ValueOf(i).Convert(ft))
+		case reflect.Float64,reflect.Float32:
+			f, err := strconv.ParseFloat(val, ft.Bits())
+			if err != nil {
+				return http.StatusBadRequest, err
+			}
+			fv.Set(reflect.ValueOf(f).Convert(ft))
+		case reflect.Bool:
+			b, err := strconv.ParseBool(val)
+			if err != nil {
+				return http.StatusBadRequest, err
+			}
+			fv.Set(reflect.ValueOf(b))
+		default:
+			return http.StatusNotImplemented, fmt.Errorf("value of type %s not implemented", ft.Name())
+		}
+	}
+	return http.StatusOK, nil
+}
+
 func (c *Context) QueryParam(name string) string {
 	if c.q == nil {
 		c.q = c.r.URL.Query()
 	}
 	return c.q.Get(name)
+}
+
+func (c *Context) GetQueryArray(name string) ([]string, bool) {
+	if c.q == nil {
+		c.q = c.r.URL.Query()
+	}
+	vals, ok := c.q[name]
+	return vals, ok
+}
+
+func (c *Context) GetQueryParam(name string) (string, bool) {
+	if c.q == nil {
+		c.q = c.r.URL.Query()
+	}
+	if vals, ok := c.q[name]; ok {
+		return vals[0], true
+	} else {
+		return "", false
+	}
 }
 
 func (c *Context) QueryParams() url.Values {
