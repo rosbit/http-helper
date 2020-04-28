@@ -58,9 +58,9 @@ func (c *Context) Param(name string) string {
 // param name is specified by field tag. e.g.
 //
 // var vals struct {
-//    V1 int    `path:"v1"`   // read path param ":v1", int8,uint8, ..., int64, uint64 are acceptable
-//    V2 bool   `query:"v2"`  // read query param "v2=xxx"
-//    V3 string `form:"v3"`   // read form param "v3=xxx"
+//    V1 int    `path:"v1" optional`       // read path param ":v1" optionally, any integer type (u)int8/16/32/64 is acceptable
+//    V2 bool   `query:"v2" ignore-error`  // read query param "v2=xxx", ignore error occurring
+//    V3 string `form:"v3"`                // read form param "v3=xxx", type string can be replace with []byte
 // }
 // if status, err := c.ReadParams(&vals); err != nil {
 //    c.Error(status, err.Error())
@@ -97,38 +97,52 @@ func (c *Context) ReadParams(vals interface{}) (status int, err error) {
 			val = c.Param(tag)
 		}
 		if len(val) == 0 {
-			continue
+			if _, optional := field.Tag.Lookup("optional"); optional {
+				continue
+			}
+			return http.StatusBadRequest, fmt.Errorf("no value specified for field %s", field.Name)
 		}
+		_, ignoreError := field.Tag.Lookup("ignore-error")
 
 		fv := v.Field(i) // field Value
 		ft := field.Type // field Type
 		switch ft.Kind() {
 		case reflect.String:
-			fv.Set(reflect.ValueOf(val))
+			fv.SetString(val)
 		case reflect.Int,reflect.Int8,reflect.Int16,reflect.Int32,reflect.Int64:
 			i, err := strconv.ParseInt(val, 10, ft.Bits())
 			if err != nil {
-				return http.StatusBadRequest, err
+				if !ignoreError { return http.StatusBadRequest, err }
+				continue
 			}
-			fv.Set(reflect.ValueOf(i).Convert(ft))
+			fv.SetInt(i)
 		case reflect.Uint,reflect.Uint8,reflect.Uint16,reflect.Uint32,reflect.Uint64:
 			i, err := strconv.ParseUint(val, 10, ft.Bits())
 			if err != nil {
-				return http.StatusBadRequest, err
+				if !ignoreError { return http.StatusBadRequest, err }
+				continue
 			}
-			fv.Set(reflect.ValueOf(i).Convert(ft))
+			fv.SetUint(i)
 		case reflect.Float64,reflect.Float32:
 			f, err := strconv.ParseFloat(val, ft.Bits())
 			if err != nil {
-				return http.StatusBadRequest, err
+				if !ignoreError { return http.StatusBadRequest, err }
+				continue
 			}
-			fv.Set(reflect.ValueOf(f).Convert(ft))
+			fv.SetFloat(f)
 		case reflect.Bool:
 			b, err := strconv.ParseBool(val)
 			if err != nil {
-				return http.StatusBadRequest, err
+				if !ignoreError { return http.StatusBadRequest, err }
+				continue
 			}
-			fv.Set(reflect.ValueOf(b))
+			fv.SetBool(b)
+		case reflect.Slice:
+			if ft.Elem().Kind() == reflect.Uint8 {
+				fv.SetBytes([]byte(val))
+				break
+			}
+			fallthrough
 		default:
 			return http.StatusNotImplemented, fmt.Errorf("value of type %s not implemented", ft.Name())
 		}
