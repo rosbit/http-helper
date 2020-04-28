@@ -54,19 +54,26 @@ func (c *Context) Param(name string) string {
 	return c.p.Get(name)
 }
 
-// read values from path, query string or form, store them in a struct specified by vals.
+// read values from path, query string, form, header or cookie, store them in a struct specified by vals.
 // param name is specified by field tag. e.g.
 //
 // var vals struct {
 //    V1 int    `path:"v1" optional`       // read path param ":v1" optionally, any integer type (u)int8/16/32/64 is acceptable
 //    V2 bool   `query:"v2" ignore-error`  // read query param "v2=xxx", ignore error occurring
 //    V3 string `form:"v3"`                // read form param "v3=xxx", type string can be replace with []byte
+//    V4 int    `header:"Content-Length"`  // read header "Content-Length"
+//    V5 []byte `cookie:"v5" optional`     // read cookie "v4" opiontally
 // }
 // if status, err := c.ReadParams(&vals); err != nil {
 //    c.Error(status, err.Error())
 //    return
 // }
 func (c *Context) ReadParams(vals interface{}) (status int, err error) {
+	type tagHandler struct {
+		tagName string
+		getVal  func(string)string
+	}
+
 	if vals == nil {
 		return http.StatusOK, nil
 	}
@@ -80,21 +87,21 @@ func (c *Context) ReadParams(vals interface{}) (status int, err error) {
 	}
 	t := v.Type() // struct Type
 	n := t.NumField()
-	var val string
+	tagHandlers := []tagHandler{
+		tagHandler{"path",  c.Param},
+		tagHandler{"query", c.QueryParam},
+		tagHandler{"form",  c.FormValue},
+		tagHandler{"header",c.Header},
+		tagHandler{"cookie",c.CookieValue},
+	}
 	for i:=0; i<n; i++ {
 		field := t.Field(i) // StructField
-		if tag, ok := field.Tag.Lookup("path"); !ok {
-			if tag, ok = field.Tag.Lookup("query"); !ok {
-				if tag, ok = field.Tag.Lookup("form"); !ok {
-					continue
-				} else {
-					val = c.FormValue(tag)
-				}
-			} else {
-				val = c.QueryParam(tag)
+		val := ""
+		for _, tagHandler := range tagHandlers {
+			if tag, ok := field.Tag.Lookup(tagHandler.tagName); ok {
+				val = tagHandler.getVal(tag)
+				break
 			}
-		} else {
-			val = c.Param(tag)
 		}
 		if len(val) == 0 {
 			if _, optional := field.Tag.Lookup("optional"); optional {
@@ -216,6 +223,14 @@ func (c *Context) MultipartForm() (*multipart.Form, error) {
 
 func (c *Context) Cookie(name string) (*http.Cookie, error) {
 	return c.r.Cookie(name)
+}
+
+func (c *Context) CookieValue(n string) string {
+	if ck, err := c.Cookie(n); err != nil {
+		return ""
+	} else {
+		return ck.Value
+	}
 }
 
 func (c *Context) SetCookie(cookie *http.Cookie) {
@@ -340,9 +355,8 @@ func (c *Context) ReadJSON(res interface{}) (code int, err error) {
 	}
 	defer c.r.Body.Close()
 
-	dec := json.NewDecoder(c.r.Body)
-	if err = dec.Decode(res); err != nil {
-		return http.StatusInternalServerError, err
+	if err = json.NewDecoder(c.r.Body).Decode(res); err != nil {
+		return http.StatusBadRequest, err
 	}
 	return http.StatusOK, nil
 }
