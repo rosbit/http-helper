@@ -2,13 +2,13 @@ package helper
 
 import (
 	"github.com/urfave/negroni"
-	"github.com/gernest/alien"
+	"github.com/go-zoo/bone"
 	"net/http"
 )
 
 type HttpHelper struct {
 	n *negroni.Negroni
-	m *alien.Mux
+	m *bone.Mux
 }
 
 func NewHelper(handlers ...negroni.Handler) *HttpHelper {
@@ -20,7 +20,7 @@ func NewHelper(handlers ...negroni.Handler) *HttpHelper {
 			n.Use(handler)
 		}
 	}
-	m := alien.New()
+	m := bone.New()
 	n.UseHandler(m)
 	return &HttpHelper{n, m}
 }

@@ -1,7 +1,7 @@
 package helper
 
 import (
-	"github.com/gernest/alien"
+	"github.com/go-zoo/bone"
 	"net/http"
 	"net/url"
 	"strings"
@@ -28,7 +28,7 @@ const (
 type Context struct {
 	w  http.ResponseWriter
 	r *http.Request
-	p  alien.Params
+	p  map[string]string
 	q  url.Values
 }
 
@@ -46,12 +46,15 @@ func (c *Context) Response() http.ResponseWriter {
 
 func (c *Context) Param(name string) string {
 	if c.p == nil {
-		c.p = alien.GetParams(c.r)
+		c.p = bone.GetAllValues(c.r)
 	}
-	if c.p == nil {
+	if len(c.p) == 0 {
 		return ""
 	}
-	return c.p.Get(name)
+	if v, ok := c.p[name]; ok {
+		return v
+	}
+	return ""
 }
 
 // read values from path, query string, form, header or cookie, store them in a struct specified by vals.
