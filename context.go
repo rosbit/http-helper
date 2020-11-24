@@ -273,6 +273,7 @@ func (c *Context) String(code int, s string) error {
 
 func (c *Context) json(code int, i interface{}, indent string) error {
 	enc := json.NewEncoder(c.w)
+	enc.SetEscapeHTML(false)
 	if indent != "" {
 		enc.SetIndent("", indent)
 	}
