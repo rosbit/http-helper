@@ -7,8 +7,8 @@ import (
 )
 
 type HttpHelper struct {
+	RouterGroup
 	n *negroni.Negroni
-	m *bone.Mux
 }
 
 func NewHelper(handlers ...negroni.Handler) *HttpHelper {
@@ -22,7 +22,13 @@ func NewHelper(handlers ...negroni.Handler) *HttpHelper {
 	}
 	m := bone.New()
 	n.UseHandler(m)
-	return &HttpHelper{n, m}
+	return &HttpHelper{
+		RouterGroup: RouterGroup{
+			basePath: "/",
+			m: m,
+		},
+		n: n,
+	}
 }
 
 func (h *HttpHelper) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -49,3 +55,6 @@ func (h *HttpHelper) UseHandlerFunc(handlerFunc http.HandlerFunc) {
 	h.n.UseHandlerFunc(handlerFunc)
 }
 
+func (hr *HttpHelper) NotFoundHandler(h http.Handler) {
+	hr.m.NotFound(h)
+}

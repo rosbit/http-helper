@@ -32,6 +32,15 @@ type Context struct {
 	q  url.Values
 }
 
+type ContextHandlerFunc func(c *Context)
+
+func unwrap(handlerFunc ContextHandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		c := NewHttpContext(w, r)
+		handlerFunc(c)
+	}
+}
+
 func NewHttpContext(w http.ResponseWriter, r *http.Request) *Context {
 	return &Context{w:w, r:r}
 }
