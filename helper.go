@@ -3,6 +3,8 @@ package helper
 import (
 	"github.com/urfave/negroni"
 	"github.com/go-zoo/bone"
+	"log"
+	"os"
 	"net/http"
 )
 
@@ -14,7 +16,7 @@ type HttpHelper struct {
 func NewHelper(handlers ...negroni.Handler) *HttpHelper {
 	n := negroni.New()
 	n.Use(negroni.NewRecovery())
-	n.Use(negroni.NewLogger())
+	n.Use(newLogger())
 	if handlers != nil {
 		for _, handler := range handlers {
 			n.Use(handler)
@@ -29,6 +31,13 @@ func NewHelper(handlers ...negroni.Handler) *HttpHelper {
 		},
 		n: n,
 	}
+}
+
+func newLogger() *negroni.Logger {
+	logger := &negroni.Logger{ALogger: log.New(os.Stdout, "[http-helper] ", 0)}
+	logger.SetDateFormat(negroni.LoggerDefaultDateFormat)
+	logger.SetFormat("{{.StartTime}} | {{.Status}} | \t {{.Duration}} | {{.Hostname}} | {{.Method}} {{.Request.RequestURI}}")
+	return logger
 }
 
 func (h *HttpHelper) ServeHTTP(w http.ResponseWriter, r *http.Request) {
