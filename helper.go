@@ -5,6 +5,7 @@ import (
 	"github.com/go-zoo/bone"
 	"log"
 	"os"
+	"fmt"
 	"net/http"
 )
 
@@ -16,12 +17,23 @@ type HttpHelper struct {
 func NewHelper(handlers ...negroni.Handler) *HttpHelper {
 	n := negroni.New()
 	n.Use(negroni.NewRecovery())
-	n.Use(newLogger())
-	if handlers != nil {
-		for _, handler := range handlers {
+
+	hasLogger := false
+	for _, handler := range handlers {
+		if _, ok := handler.(*negroni.Logger); ok {
+			hasLogger = true
 			n.Use(handler)
 		}
 	}
+	if !hasLogger {
+		n.Use(WithLogger("http-helper"))
+	}
+	for _, handler := range handlers {
+		if _, ok := handler.(*negroni.Logger); !ok {
+			n.Use(handler)
+		}
+	}
+
 	m := bone.New()
 	n.UseHandler(m)
 	return &HttpHelper{
@@ -33,8 +45,8 @@ func NewHelper(handlers ...negroni.Handler) *HttpHelper {
 	}
 }
 
-func newLogger() *negroni.Logger {
-	logger := &negroni.Logger{ALogger: log.New(os.Stdout, "[http-helper] ", 0)}
+func WithLogger(name string) negroni.Handler {
+	logger := &negroni.Logger{ALogger: log.New(os.Stdout, fmt.Sprintf("[%s] ", name), 0)}
 	logger.SetDateFormat(negroni.LoggerDefaultDateFormat)
 	logger.SetFormat("{{.StartTime}} | {{.Status}} | \t {{.Duration}} | {{.Hostname}} | {{.Method}} {{.Request.RequestURI}}")
 	return logger
