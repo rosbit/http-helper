@@ -405,5 +405,17 @@ func (c *Context) ReadJSON(res interface{}) (code int, err error) {
 	if err = json.NewDecoder(c.r.Body).Decode(res); err != nil {
 		return http.StatusBadRequest, err
 	}
+
 	return http.StatusOK, nil
+}
+
+func (c *Context) ReadAndValidateJSON(res interface{}) (code int, err error) {
+	if code, err = c.ReadJSON(res); err != nil {
+		return
+	}
+	v := validator.New()
+	if err = v.Struct(res); err != nil {
+		code = http.StatusBadRequest
+	}
+	return
 }
