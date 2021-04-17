@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"github.com/go-playground/validator/v10"
 	"github.com/go-zoo/bone"
 	"net/http"
 	"net/url"
@@ -70,7 +71,7 @@ func (c *Context) Param(name string) string {
 // param name is specified by field tag. e.g.
 //
 // var vals struct {
-//    V1 int    `path:"v1" optional`       // read path param ":v1" optionally, any integer type (u)int8/16/32/64 is acceptable
+//    V1 int    `path:"v1" optional`       // read path param "v1" optionally, any integer type (u)int8/16/32/64 is acceptable
 //    V2 bool   `query:"v2" ignore-error`  // read query param "v2=xxx", ignore error occurring
 //    V3 string `form:"v3"`                // read form param "v3=xxx", type string can be replace with []byte
 //    V4 int    `header:"Content-Length"`  // read header "Content-Length"
@@ -81,6 +82,36 @@ func (c *Context) Param(name string) string {
 //    return
 // }
 func (c *Context) ReadParams(vals interface{}) (status int, err error) {
+	return c.readParams(vals, false)
+}
+
+// read values from path, query string, form, header or cookie, store them in a struct specified by vals,
+// then values are validated by using "github.com/go-playground/validator/v10".
+// param name is specified by field tag. e.g.
+//
+// var vals struct {
+//    V1 int    `path:"v1" validate:"gt=0"`     // read path param "v1", the value must be greater than 0
+//    V2 bool   `query:"v2"`                    // read query param "v2=xxx"
+//    V3 string `form:"v3" validate:"required"` // read form param "v3=xxx",
+//    V4 int    `header:"Content-Length"`       // read header "Content-Length"
+//    V5 []byte `cookie:"v5"`                   // read cookie "v4"
+// }
+// if status, err := c.ReadAndValidate(&vals); err != nil {
+//    c.Error(status, err.Error())
+//    return
+// }
+func (c *Context) ReadAndValidate(vals interface{}) (status int, err error) {
+	if status, err = c.readParams(vals, true); err != nil {
+		return
+	}
+	v := validator.New()
+	if err = v.Struct(vals); err != nil {
+		status = http.StatusBadRequest
+	}
+	return
+}
+
+func (c *Context) readParams(vals interface{}, onlyRead bool) (status int, err error) {
 	type tagHandler struct {
 		tagName string
 		getVal  func(string)string
@@ -115,13 +146,16 @@ func (c *Context) ReadParams(vals interface{}) (status int, err error) {
 				break
 			}
 		}
-		if len(val) == 0 {
-			if _, optional := field.Tag.Lookup("optional"); optional {
-				continue
+		if !onlyRead {
+			if len(val) == 0 {
+				if _, optional := field.Tag.Lookup("optional"); optional {
+					continue
+				}
+				return http.StatusBadRequest, fmt.Errorf("no value specified for field %s", field.Name)
 			}
-			return http.StatusBadRequest, fmt.Errorf("no value specified for field %s", field.Name)
 		}
 		_, ignoreError := field.Tag.Lookup("ignore-error")
+		ignoreError = !onlyRead && ignoreError
 
 		fv := v.Field(i) // field Value
 		ft := field.Type // field Type
