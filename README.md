@@ -2,7 +2,7 @@
 
 A simple http helper to support router and argument processing
 
-**NOTE** This repository was archived and replaced by [mini-gin](https://githu.com/rosbit/mgin)
+**NOTE** This repository was archived and replaced by [mini-gin](https://github.com/rosbit/mgin)
 
 ## Sample #1: handler with http.HandlerFunc
 
